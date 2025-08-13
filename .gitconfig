@@ -1,0 +1,12 @@
+[user]
+	name = John Rigby
+	email = jcrigby@gmail.com
+
+[init]
+	defaultBranch = main
+
+[push]
+	default = simple
+
+[pull]
+	rebase = false
