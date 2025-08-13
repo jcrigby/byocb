@@ -261,6 +261,63 @@
             opacity: 0.6;
         }
 
+        .debug-log {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .debug-log-header {
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .debug-log-content {
+            padding: 0.5rem;
+            overflow-x: auto;
+            display: none;
+        }
+
+        .debug-log-content.expanded {
+            display: block;
+        }
+
+        .debug-log pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+
+        .debug-log-stats {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.7rem;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .copy-button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.7rem;
+            cursor: pointer;
+            color: white;
+        }
+
+        .copy-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
         .icon {
             width: 20px;
             height: 20px;
@@ -346,6 +403,14 @@
             <div class="setting-group">
                 <label class="setting-label">GitHub Repository (Optional)</label>
                 <input type="text" id="github-repo" class="setting-input" placeholder="username/repo-name">
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">Debug Options</label>
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="debug-mode" style="width: auto;">
+                    Show Raw API Interaction Logs
+                </label>
             </div>
             
             <div class="settings-buttons">
@@ -442,6 +507,7 @@
             if (model) document.getElementById('model-select').value = model;
             if (githubToken) document.getElementById('github-token').value = githubToken;
             if (githubRepo) document.getElementById('github-repo').value = githubRepo;
+            document.getElementById('debug-mode').checked = localStorage.getItem('debug_mode') === 'true';
         }
 
         function saveSettings() {
@@ -449,14 +515,17 @@
             const model = document.getElementById('model-select').value;
             const githubToken = document.getElementById('github-token').value;
             const githubRepo = document.getElementById('github-repo').value;
+            const debugMode = document.getElementById('debug-mode').checked;
 
             localStorage.setItem('openrouter_api_key', apiKey);
             localStorage.setItem('selected_model', model);
             localStorage.setItem('github_token', githubToken);
             localStorage.setItem('github_repo', githubRepo);
+            localStorage.setItem('debug_mode', debugMode);
 
             toggleSettings();
             updateStatus();
+            renderMessages(); // Refresh to show/hide debug logs
         }
 
         function toggleSettings() {
@@ -467,6 +536,7 @@
         function renderMessages() {
             const container = document.getElementById('chat-container');
             const emptyState = container.querySelector('.empty-state');
+            const debugMode = localStorage.getItem('debug_mode') === 'true';
             
             if (messages.length === 0) {
                 if (emptyState) emptyState.style.display = 'block';
@@ -479,10 +549,67 @@
                 <div class="message ${msg.role} ${msg.error ? 'error' : ''}">
                     ${msg.content}
                     <div class="message-time">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                    ${debugMode && msg.debug ? renderDebugLog(msg.debug) : ''}
                 </div>
             `).join('');
 
             container.scrollTop = container.scrollHeight;
+
+            // Add click handlers for debug log toggles
+            document.querySelectorAll('.debug-log-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const content = header.nextElementSibling;
+                    content.classList.toggle('expanded');
+                });
+            });
+
+            // Add click handlers for copy buttons
+            document.querySelectorAll('.copy-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const content = button.getAttribute('data-content');
+                    navigator.clipboard.writeText(content);
+                    const originalText = button.textContent;
+                    button.textContent = 'Copied!';
+                    setTimeout(() => button.textContent = originalText, 1500);
+                });
+            });
+        }
+
+        function renderDebugLog(debug) {
+            const request = JSON.stringify(debug.request, null, 2);
+            const response = JSON.stringify(debug.response, null, 2);
+            
+            return `
+                <div class="debug-log">
+                    <div class="debug-log-header">
+                        <span>🔍 Raw API Interaction Log</span>
+                        <button class="copy-button" data-content="${escapeHtml(JSON.stringify(debug))}">Copy JSON</button>
+                    </div>
+                    <div class="debug-log-content">
+                        <div>
+                            <strong>Request:</strong>
+                            <pre>${escapeHtml(request)}</pre>
+                        </div>
+                        <div style="margin-top: 1rem;">
+                            <strong>Response:</strong>
+                            <pre>${escapeHtml(response)}</pre>
+                        </div>
+                        <div class="debug-log-stats">
+                            Request Time: ${new Date(debug.requestTime).toISOString()}<br>
+                            Response Time: ${new Date(debug.responseTime).toISOString()}<br>
+                            Total Tokens: ${debug.response.usage?.total_tokens || 'N/A'}<br>
+                            Model: ${debug.response.model || 'N/A'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
         }
 
         function showTyping() {
@@ -534,6 +661,14 @@
 
             try {
                 const model = localStorage.getItem('selected_model') || 'anthropic/claude-3.5-sonnet';
+                const requestTime = new Date().toISOString();
+                const requestBody = {
+                    model: model,
+                    messages: messages.map(m => ({ role: m.role, content: m.content })),
+                    temperature: 0.7,
+                    max_tokens: 2000
+                };
+                
                 const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -557,11 +692,19 @@
                 }
 
                 const data = await response.json();
+                const responseTime = new Date().toISOString();
+                
                 const assistantMessage = {
                     role: 'assistant',
                     content: data.choices[0].message.content,
                     timestamp: new Date().toISOString(),
-                    model: model
+                    model: model,
+                    debug: {
+                        request: requestBody,
+                        response: data,
+                        requestTime: requestTime,
+                        responseTime: responseTime
+                    }
                 };
 
                 messages.push(assistantMessage);
