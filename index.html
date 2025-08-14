@@ -146,6 +146,16 @@
             transform: none;
         }
 
+        .settings-btn.pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
         .settings-btn {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -496,9 +506,11 @@
             if (!isOnline) {
                 status.textContent = 'Offline mode';
             } else if (!apiKey) {
-                status.textContent = 'Configure API key to start';
+                status.textContent = 'Click Settings to configure API key';
+                document.querySelector('.settings-btn').classList.add('pulse');
             } else {
                 status.textContent = 'Ready to chat';
+                document.querySelector('.settings-btn').classList.remove('pulse');
             }
         }
 
